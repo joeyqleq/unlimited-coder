@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { useIDEState } from '@/lib/ideState';
 import { getPuter } from '@/lib/puterClient';
+import { randomId } from '@/lib/randomId';
 import { listFiles, readFile, writeFile, createEntry, deleteEntry, applyPatch, saveSummary, getSummary } from '@/lib/fsClient';
 
 /**
@@ -41,7 +42,7 @@ export function ChatPanel() {
         if (Array.isArray(stored)) {
           useIDEState.getState().replaceChat(
             stored.map((m: any) => ({
-              id: crypto.randomUUID(),
+              id: randomId(),
               role: m.role,
               content: normalizeContent(m.content),
             }))
@@ -285,7 +286,38 @@ export function ChatPanel() {
     return 'Unknown tool';
   }
 
-  async function callAI(messages: any[], useTools = true) {
+  function adaptProviderResponse(data: any) {
+    if (!data) throw new Error('Empty provider response');
+    if (data.error) {
+      if (typeof data.error === 'string') throw new Error(data.error);
+      throw new Error(data.error.message ?? JSON.stringify(data.error));
+    }
+    if (Array.isArray(data.choices) && data.choices.length) {
+      const choice = data.choices[0];
+      return {
+        message: choice.message ?? { role: 'assistant', content: choice.text ?? '' },
+        usage: data.usage ?? choice.usage,
+      };
+    }
+    if (typeof data.output_text === 'string') {
+      return { message: { role: 'assistant', content: data.output_text }, usage: data.usage };
+    }
+    if (typeof data.output === 'string') {
+      return { message: { role: 'assistant', content: data.output }, usage: data.usage };
+    }
+    if (typeof data.message === 'string') {
+      return { message: { role: 'assistant', content: data.message }, usage: data.usage };
+    }
+    if (data.message?.content) {
+      return { message: data.message, usage: data.usage };
+    }
+    if (data.content) {
+      return { message: { role: 'assistant', content: data.content }, usage: data.usage };
+    }
+    return data;
+  }
+
+  async function callAI(messages: any[], allowTools = true) {
     const puter = getPuter();
     if (!puter) throw new Error('Puter not loaded');
     // If a provider is selected, call the custom provider route
@@ -297,10 +329,29 @@ export function ChatPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages, apiKey: provider.apiKey, apiUrl: provider.url }),
       });
-      return await resp.json();
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `Provider ${provider.label || provider.id} request failed`);
+      }
+      const data = await resp.json();
+      return adaptProviderResponse(data);
     }
-    // Otherwise call Puter AI
-    return await puter.ai.chat(messages, { model: modelId, tools: useTools ? tools : undefined, stream: false });
+    // Otherwise call Puter AI, retrying without tools if unsupported
+    const toolAttempts = allowTools ? [true, false] : [false];
+    let lastError: any;
+    for (const withTools of toolAttempts) {
+      try {
+        return await puter.ai.chat(messages, {
+          model: modelId,
+          tools: withTools ? tools : undefined,
+          stream: false,
+        });
+      } catch (err) {
+        lastError = err;
+        if (!withTools) break;
+      }
+    }
+    throw new Error((lastError as any)?.message || `Model ${modelId} is unavailable right now.`);
   }
 
   async function trackUsage(modelId: string, tokens: number, duration: number) {
@@ -326,7 +377,7 @@ export function ChatPanel() {
     if (!text) return;
     setIsSending(true);
     setInput('');
-    appendChat({ id: crypto.randomUUID(), role: 'user', content: text });
+    appendChat({ id: randomId(), role: 'user', content: text });
     const startTime = Date.now();
     try {
       let messages = buildMessages(text);
@@ -348,12 +399,17 @@ export function ChatPanel() {
       }
       const reply = normalizeContent(result.message?.content ?? '');
       const duration = Date.now() - startTime;
-      appendChat({ id: crypto.randomUUID(), role: 'assistant', content: reply });
+      appendChat({ id: randomId(), role: 'assistant', content: reply });
       await getPuter()?.kv.set('ultimate_coder_history', [...messages, { role: 'assistant', content: reply }]);
       // Track usage for analytics
       await trackUsage(modelId, totalTokens || 0, duration);
     } catch (err: any) {
-      appendChat({ id: crypto.randomUUID(), role: 'assistant', content: 'Error: ' + err.message });
+      console.error(err);
+      appendChat({
+        id: randomId(),
+        role: 'assistant',
+        content: 'Error: ' + (err?.message || 'Unknown issue contacting the model.'),
+      });
     } finally {
       setIsSending(false);
     }

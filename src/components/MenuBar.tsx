@@ -34,7 +34,43 @@ import { Separator } from '@/components/ui/separator';
 import { useIDEState } from '@/lib/ideState';
 import { createEntry, listFiles, readFile } from '@/lib/fsClient';
 
-export function MenuBar() {
+type RunAction = 'debug' | 'run' | 'stop';
+type HelpTopic = 'welcome' | 'docs' | 'shortcuts' | 'settings';
+
+interface MenuBarProps {
+  onShowTerminal: () => void;
+  onClearTerminal: () => void;
+  onTerminalMessage: (message: string) => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomReset: () => void;
+  minimapEnabled: boolean;
+  onToggleMinimap: () => void;
+  onOpenCommandPalette: () => void;
+  onRunCommand: (action: RunAction) => void;
+  onShowHelp: (topic: HelpTopic) => void;
+}
+
+function emitEditorEvent(name: 'ide:go-to-symbol' | 'ide:go-to-line') {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(name));
+}
+
+const iconClass = 'mr-2 h-3 w-3 shrink-0 text-neutral-400';
+
+export function MenuBar({
+  onShowTerminal,
+  onClearTerminal,
+  onTerminalMessage,
+  onZoomIn,
+  onZoomOut,
+  onZoomReset,
+  minimapEnabled,
+  onToggleMinimap,
+  onOpenCommandPalette,
+  onRunCommand,
+  onShowHelp,
+}: MenuBarProps) {
   const menuContentClass =
     "w-52 bg-[#0f1624] border border-white/10 shadow-xl text-[12px] backdrop-blur-md";
 
@@ -131,30 +167,30 @@ export function MenuBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className={menuContentClass} sideOffset={4}>
             <DropdownMenuItem onClick={handleNewFile}>
-              <FileText className="mr-2 h-4 w-4" />
+              <FileText className={iconClass} />
               New File
               <span className="ml-auto text-xs text-muted-foreground">⌘N</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleOpenFile}>
-              <FolderOpen className="mr-2 h-4 w-4" />
+              <FolderOpen className={iconClass} />
               Open File...
               <span className="ml-auto text-xs text-muted-foreground">⌘O</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleSetRoot}>
-              <FolderOpen className="mr-2 h-4 w-4" />
+              <FolderOpen className={iconClass} />
               Set Project Root
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleCloneRepo}>
-              <GitBranch className="mr-2 h-4 w-4" />
+              <GitBranch className={iconClass} />
               Clone Git Repo
             </DropdownMenuItem>
             <DropdownMenuItem>
-              <Save className="mr-2 h-4 w-4" />
+              <Save className={iconClass} />
               Save
               <span className="ml-auto text-xs text-muted-foreground">⌘S</span>
             </DropdownMenuItem>
             <DropdownMenuItem>
-              <Save className="mr-2 h-4 w-4" />
+              <Save className={iconClass} />
               Save As...
               <span className="ml-auto text-xs text-muted-foreground">⇧⌘S</span>
             </DropdownMenuItem>
@@ -175,39 +211,39 @@ export function MenuBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className={menuContentClass} sideOffset={4}>
             <DropdownMenuItem>
-              <Undo className="mr-2 h-4 w-4" />
+              <Undo className={iconClass} />
               Undo
               <span className="ml-auto text-xs text-muted-foreground">⌘Z</span>
             </DropdownMenuItem>
             <DropdownMenuItem>
-              <Redo className="mr-2 h-4 w-4" />
+              <Redo className={iconClass} />
               Redo
               <span className="ml-auto text-xs text-muted-foreground">⇧⌘Z</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
-              <Scissors className="mr-2 h-4 w-4" />
+              <Scissors className={iconClass} />
               Cut
               <span className="ml-auto text-xs text-muted-foreground">⌘X</span>
             </DropdownMenuItem>
             <DropdownMenuItem>
-              <Copy className="mr-2 h-4 w-4" />
+              <Copy className={iconClass} />
               Copy
               <span className="ml-auto text-xs text-muted-foreground">⌘C</span>
             </DropdownMenuItem>
             <DropdownMenuItem>
-              <Clipboard className="mr-2 h-4 w-4" />
+              <Clipboard className={iconClass} />
               Paste
               <span className="ml-auto text-xs text-muted-foreground">⌘V</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
-              <Search className="mr-2 h-4 w-4" />
+              <Search className={iconClass} />
               Find
               <span className="ml-auto text-xs text-muted-foreground">⌘F</span>
             </DropdownMenuItem>
             <DropdownMenuItem>
-              <Search className="mr-2 h-4 w-4" />
+              <Search className={iconClass} />
               Replace
               <span className="ml-auto text-xs text-muted-foreground">⌥⌘F</span>
             </DropdownMenuItem>
@@ -222,27 +258,31 @@ export function MenuBar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className={menuContentClass} sideOffset={4}>
-            <DropdownMenuItem>
-              <ZoomIn className="mr-2 h-4 w-4" />
+            <DropdownMenuItem onClick={onZoomIn}>
+              <ZoomIn className={iconClass} />
               Zoom In
               <span className="ml-auto text-xs text-muted-foreground">⌘=</span>
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <ZoomOut className="mr-2 h-4 w-4" />
+            <DropdownMenuItem onClick={onZoomOut}>
+              <ZoomOut className={iconClass} />
               Zoom Out
               <span className="ml-auto text-xs text-muted-foreground">⌘-</span>
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={onZoomReset}>
+              <ZoomOut className={iconClass} />
+              Reset Zoom
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <Layout className="mr-2 h-4 w-4" />
+            <DropdownMenuItem onClick={() => onShowHelp('welcome')}>
+              <Layout className={iconClass} />
               Appearance
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Eye className="mr-2 h-4 w-4" />
-              Show Minimap
+            <DropdownMenuItem onClick={onToggleMinimap}>
+              <Eye className={iconClass} />
+              {minimapEnabled ? 'Hide Minimap' : 'Show Minimap'}
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Code className="mr-2 h-4 w-4" />
+            <DropdownMenuItem onClick={onOpenCommandPalette}>
+              <Code className={iconClass} />
               Command Palette...
               <span className="ml-auto text-xs text-muted-foreground">⌘⇧P</span>
             </DropdownMenuItem>
@@ -257,15 +297,15 @@ export function MenuBar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className={menuContentClass} sideOffset={4}>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleOpenFile}>
               Go to File...
               <span className="ml-auto text-xs text-muted-foreground">⌘P</span>
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => emitEditorEvent('ide:go-to-symbol')}>
               Go to Symbol...
               <span className="ml-auto text-xs text-muted-foreground">⌘⇧O</span>
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => emitEditorEvent('ide:go-to-line')}>
               Go to Line...
               <span className="ml-auto text-xs text-muted-foreground">⌃G</span>
             </DropdownMenuItem>
@@ -280,17 +320,17 @@ export function MenuBar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className={menuContentClass} sideOffset={4}>
-            <DropdownMenuItem>
-              <Play className="mr-2 h-4 w-4" />
+            <DropdownMenuItem onClick={() => onRunCommand('debug')}>
+              <Play className={iconClass} />
               Start Debugging
               <span className="ml-auto text-xs text-muted-foreground">F5</span>
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onRunCommand('run')}>
               Run Without Debugging
               <span className="ml-auto text-xs text-muted-foreground">⌃F5</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onRunCommand('stop')}>
               Stop
               <span className="ml-auto text-xs text-muted-foreground">⇧F5</span>
             </DropdownMenuItem>
@@ -305,16 +345,26 @@ export function MenuBar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className={menuContentClass} sideOffset={4}>
-            <DropdownMenuItem>
-              <TerminalIcon className="mr-2 h-4 w-4" />
+            <DropdownMenuItem
+              onClick={() => {
+                onShowTerminal();
+                onTerminalMessage('Opened new terminal session.');
+              }}
+            >
+              <TerminalIcon className={iconClass} />
               New Terminal
               <span className="ml-auto text-xs text-muted-foreground">⌃`</span>
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                onShowTerminal();
+                onTerminalMessage('Split terminals coming soon — showing primary terminal.');
+              }}
+            >
               Split Terminal
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={onClearTerminal}>
               Clear Terminal
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -328,19 +378,19 @@ export function MenuBar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className={menuContentClass} sideOffset={4}>
-            <DropdownMenuItem>
-              <HelpCircle className="mr-2 h-4 w-4" />
+            <DropdownMenuItem onClick={() => onShowHelp('welcome')}>
+              <HelpCircle className={iconClass} />
               Welcome
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onShowHelp('docs')}>
               Documentation
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onShowHelp('shortcuts')}>
               Keyboard Shortcuts
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
+            <DropdownMenuItem onClick={() => onShowHelp('settings')}>
+              <Settings className={iconClass} />
               Settings
             </DropdownMenuItem>
           </DropdownMenuContent>

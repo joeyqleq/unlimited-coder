@@ -8,6 +8,7 @@ export function TerminalPane() {
   useEffect(() => {
     let term: any;
     let fitAddon: any;
+    let removeMessageListener: (() => void) | null = null;
 
     (async () => {
       if (!containerRef.current) return;
@@ -29,6 +30,22 @@ export function TerminalPane() {
 
       const handleResize = () => fitAddon?.fit?.();
       window.addEventListener("resize", handleResize);
+      const handleTerminalMessage = (event: Event) => {
+        const detail = (event as CustomEvent<{ text?: string; clear?: boolean }>).detail;
+        if (!detail || !term) return;
+        if (detail.clear) {
+          term.clear();
+          term.write("> ");
+          return;
+        }
+        if (detail.text) {
+          term.writeln(detail.text);
+          term.write("> ");
+        }
+      };
+      window.addEventListener("ide:terminal-message", handleTerminalMessage as EventListener);
+      removeMessageListener = () =>
+        window.removeEventListener("ide:terminal-message", handleTerminalMessage as EventListener);
 
       return () => {
         window.removeEventListener("resize", handleResize);
@@ -37,6 +54,7 @@ export function TerminalPane() {
 
     return () => {
       try {
+        removeMessageListener?.();
         fitAddon?.dispose?.();
         term?.dispose?.();
       } catch {}

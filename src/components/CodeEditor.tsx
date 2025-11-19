@@ -3,11 +3,15 @@
 import dynamic from 'next/dynamic';
 import { useIDEState } from '@/lib/ideState';
 import { getPuter } from '@/lib/puterClient';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
-export function CodeEditor() {
+interface CodeEditorProps {
+  showMinimap: boolean;
+}
+
+export function CodeEditor({ showMinimap }: CodeEditorProps) {
   const { currentFile, editorContent, setEditorContent, backend } = useIDEState();
   const [isCompleting, setIsCompleting] = useState(false);
   const editorRef = useRef<any>(null);
@@ -56,6 +60,43 @@ export function CodeEditor() {
       setIsCompleting(false);
     }
   }
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleGoToLine = () => {
+      const editor = editorRef.current?.editor;
+      if (!editor) return;
+      const input = prompt('Go to line number:');
+      if (!input) return;
+      const line = parseInt(input, 10);
+      if (Number.isNaN(line) || line <= 0) return;
+      editor.revealLineInCenter(line);
+      editor.setPosition({ lineNumber: line, column: 1 });
+      editor.focus();
+    };
+    const handleGoToSymbol = () => {
+      const editor = editorRef.current?.editor;
+      if (!editor) return;
+      const symbol = prompt('Go to symbol name:');
+      if (!symbol) return;
+      const model = editor.getModel();
+      if (!model) return;
+      const [match] = model.findMatches(symbol, false, false, false, null, false);
+      if (match) {
+        editor.revealRangeInCenter(match.range);
+        editor.setSelection(match.range);
+        editor.focus();
+      } else {
+        alert(`Symbol "${symbol}" not found in current file.`);
+      }
+    };
+    window.addEventListener('ide:go-to-line', handleGoToLine as EventListener);
+    window.addEventListener('ide:go-to-symbol', handleGoToSymbol as EventListener);
+    return () => {
+      window.removeEventListener('ide:go-to-line', handleGoToLine as EventListener);
+      window.removeEventListener('ide:go-to-symbol', handleGoToSymbol as EventListener);
+    };
+  }, []);
+
   return (
     <div className="h-full flex flex-col">
       <div className="h-7 flex items-center justify-between px-2 border-b border-neutral-800 text-[11px]">
@@ -83,7 +124,7 @@ export function CodeEditor() {
           theme="vs-dark"
           value={editorContent}
           onChange={onChange}
-          options={{ fontSize: 13, minimap: { enabled: false }, wordWrap: 'on', smoothScrolling: true }}
+          options={{ fontSize: 13, minimap: { enabled: showMinimap }, wordWrap: 'on', smoothScrolling: true }}
           onMount={(editor) => {
             editorRef.current = { editor };
           }}

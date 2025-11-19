@@ -2,6 +2,7 @@
 
 import { useIDEState } from "@/lib/ideState";
 import { getPuter } from "@/lib/puterClient";
+import { randomId } from "@/lib/randomId";
 import { useEffect, useState } from "react";
 import { ChevronRightIcon, ChevronDownIcon, FileTextIcon } from "@radix-ui/react-icons";
 
@@ -178,7 +179,7 @@ export function FileTree() {
             onClick={() => {
               setMenu((m) => ({ ...m, open: false }));
               useIDEState.getState().appendChat({
-                id: crypto.randomUUID(),
+                id: randomId(),
                 role: "user",
                 content: `Inspect and help with file: ${menu.node?.path}`,
               });
